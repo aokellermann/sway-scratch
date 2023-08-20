@@ -2,7 +2,6 @@
 
 ## Usage
 
-
 ```
 sway-scratch show [NAME] [EXEC]
 ```
