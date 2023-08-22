@@ -36,7 +36,32 @@ struct Criteria {
     class: Option<String>,
 }
 
+enum CriteriaField {
+    AppId,
+    Class,
+}
+
 async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> {
+    let criteria_field: CriteriaField;
+    let criteria_value: &String;
+
+    let criteria = match criteria.app_id {
+        Some(ref app_id_value) => {
+            criteria_field = CriteriaField::AppId;
+            criteria_value = app_id_value;
+            format!("app_id={app_id_value}")
+        }
+        None => {
+            let class_value = criteria
+                .class
+                .as_ref()
+                .expect("--class must be specified if --app-id is not specified");
+            criteria_field = CriteriaField::Class;
+            criteria_value = class_value;
+            format!("class={class_value}")
+        }
+    };
+
     let mut connection = Connection::new().await?;
     let tree = connection.get_tree().await?;
 
@@ -95,31 +120,31 @@ async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> 
             .iter()
             .filter(|node| {
                 showing_scratches.contains(&&node.id)
-                    && node
-                        .app_id
-                        .as_ref()
-                        .is_some_and(|app_id| *app_id != *app_id)
+                    && !match criteria_field {
+                        CriteriaField::AppId => node
+                            .app_id
+                            .as_ref()
+                            .is_some_and(|app_id| *app_id == *criteria_value),
+                        CriteriaField::Class => {
+                            node.window_properties.as_ref().is_some_and(|window_props| {
+                                window_props
+                                    .class
+                                    .as_ref()
+                                    .is_some_and(|class| *class == *criteria_value)
+                            })
+                        }
+                    }
             })
             .collect();
 
         for showing_scratch_node in showing_scratch_nodes {
-            let showing_app_id = showing_scratch_node.app_id.clone().unwrap();
+            let showing_id = showing_scratch_node.id;
             connection
-                .run_command(format!("[app_id={showing_app_id}] scratchpad show"))
+                .run_command(format!("[con_id={showing_id}] scratchpad show"))
                 .await?;
         }
     }
 
-    let criteria = match criteria.app_id {
-        Some(ref app_id_value) => format!("app_id={app_id_value}"),
-        None => {
-            let class_value = criteria
-                .class
-                .as_ref()
-                .expect("--class must be specified if --app-id is not specified");
-            format!("class={class_value}")
-        }
-    };
     let show_res = connection
         .run_command(format!("[{criteria}] scratchpad show"))
         .await?;
