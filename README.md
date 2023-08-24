@@ -1,19 +1,28 @@
 # sway-scratch
 
-Automatically starting named scratchpads for sway.
+Automatically starting named scratchpads for [sway](https://github.com/swaywm/sway).
 
 ## Usage
 
 ```
-sway-scratch show [NAME] [EXEC]
+sway-scratch show --exec <EXEC> <--app-id <APP_ID>|--class <CLASS>>
 ```
 
 where:
 
-- `NAME` is the Wayland `app_id` of the application
-- `EXEC` is the command to open the scratch initially
+- `<EXEC>` is the command to open the scratch initially
+- `<APP_ID>` is the Wayland `app_id` of the application
+- `<CLASS>` is the `window_properties.class` of the application (Xwayland)
 
-For example, in your sway config, to have a named python terminal:
+### Examples
+
+To toggle a python terminal:
+
+```
+sway-scratch show --app-id scratch_py --exec "kitty --class scratch_py -e python -q"
+```
+
+In your `sway/config`, you would put something like the following:
 
 ```i3
 set $scratchpy scratch_py
@@ -24,6 +33,12 @@ bindsym $mod+equal sway-scratch show $scratchpy "$term --class $scratchpy -e pyt
 As can be seen in the example above, terminal emulators such as [kitty](https://github.com/kovidgoyal/kitty) may include
 an option for you to manually set the `app_id`
 ([--class](https://sw.kovidgoyal.net/kitty/invocation/#cmdoption-kitty-class) in this example).
+
+See [my personal dotfiles](https://github.com/aokellermann/dotfiles/blob/master/.config/sway/config)
+for a few examples of various applications.
+
+`swaymsg -r -t get_tree` is a useful tool to view the `sway` tree in order to verify
+identifiable information about windows.
 
 ## Installation
 
