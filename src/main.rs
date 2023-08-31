@@ -114,7 +114,7 @@ async fn show(
                 .iter()
                 .any(|floating| floating.id == **focus)
         })
-        .map(|id| *id)
+        .copied()
         .collect();
 
     // if any showing, we need to check which output they are on
@@ -135,7 +135,7 @@ async fn show(
             .floating_nodes
             .iter()
             .filter(|node| {
-                let is_scratch = showing_scratch_ids.contains(&&node.id);
+                let is_scratch = showing_scratch_ids.contains(&node.id);
                 let is_target = match target_criteria_field {
                     CriteriaField::AppId => node
                         .app_id
@@ -167,17 +167,14 @@ async fn show(
 
     let mut target_cmd: Vec<String> = Vec::new();
     target_cmd.push(format!("[{target_criteria}]"));
-    target_cmd.push(format!("scratchpad show"));
+    target_cmd.push("scratchpad show".to_string());
 
     // third, include resize/move if needed
     // if showing on focused, it will be hidden and the resize/move will fail
     if !is_target_showing_on_focused {
-        match resize {
-            Some(resize_arg) => {
-                target_cmd.push(format!("resize {resize_arg}"));
-                target_cmd.push(format!("move position center"));
-            }
-            _ => (),
+        if let Some(resize_arg) = resize {
+            target_cmd.push(format!("resize {resize_arg}"));
+            target_cmd.push("move position center".to_string());
         }
     }
 
@@ -212,13 +209,11 @@ async fn show(
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    let res = match &cli.command {
+    match &cli.command {
         Commands::Show {
             criteria,
             exec,
             resize,
         } => show(criteria, exec, resize).await,
-    };
-
-    res
+    }
 }

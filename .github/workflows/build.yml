@@ -5,12 +5,18 @@ on:
   pull_request:
 
 jobs:
-  lint:
+  format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: format check
         run: cargo fmt --check --verbose
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: format check
+        run: cargo clippy
   build:
     runs-on: ubuntu-latest
     steps:
