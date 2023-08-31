@@ -1,7 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use std::error::Error;
-use std::process::Command;
-use swayipc_async::{Connection, Node};
+use swayipc_async::Connection;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -50,13 +49,13 @@ async fn show(
     exec: &String,
     resize: &Option<String>,
 ) -> Result<(), Box<dyn Error>> {
-    let criteria_field: CriteriaField;
-    let criteria_value: &String;
-
-    let criteria = match criteria.app_id {
+    // "target" is the scratch we want to show or hide
+    let target_criteria_field: CriteriaField;
+    let target_criteria_value: &String;
+    let target_criteria = match criteria.app_id {
         Some(ref app_id_value) => {
-            criteria_field = CriteriaField::AppId;
-            criteria_value = app_id_value;
+            target_criteria_field = CriteriaField::AppId;
+            target_criteria_value = app_id_value;
             format!("app_id={app_id_value}")
         }
         None => {
@@ -64,8 +63,8 @@ async fn show(
                 .class
                 .as_ref()
                 .expect("--class must be specified if --app-id is not specified");
-            criteria_field = CriteriaField::Class;
-            criteria_value = class_value;
+            target_criteria_field = CriteriaField::Class;
+            target_criteria_value = class_value;
             format!("class={class_value}")
         }
     };
@@ -73,7 +72,15 @@ async fn show(
     let mut connection = Connection::new().await?;
     let tree = connection.get_tree().await?;
 
-    // first, hide any scratchpads currently showing
+    // commands are semicolon separated
+    // each command can perform multiple tasks which are comma separated
+    // each task can only apply to one criteria specification
+    let mut commands_to_run: Vec<Vec<String>> = Vec::new();
+
+    // whether target is showing on focused workspace
+    let mut is_target_showing_on_focused = false;
+
+    // scratch has its own special output node
     let scratch_output = tree
         .nodes
         .iter()
@@ -83,6 +90,7 @@ async fn show(
         })
         .expect("scratch output not found");
 
+    // scratch has its own special workspace node on its special output node
     let scratch_workspace = scratch_output
         .nodes
         .iter()
@@ -93,117 +101,106 @@ async fn show(
         .expect("scratch workspace not found");
 
     // first, if a showing scratch on current output and it is not our target scratch, toggle it
+    // if any other scratches are on different output, we don't care and it can stay showing
 
-    // focus contains all scratch ids
-    // floating contains all hidden scratches
-
-    let showing_scratches: Vec<&i64> = scratch_workspace
+    // focus contains all showing and hidden scratch ids
+    let showing_scratch_ids: Vec<i64> = scratch_workspace
         .focus
         .iter()
         .filter(|focus| {
             !scratch_workspace
+                // floating contains all hidden scratches
                 .floating_nodes
                 .iter()
                 .any(|floating| floating.id == **focus)
         })
+        .map(|id| *id)
         .collect();
-    let mut is_target_showing_on_focused = false;
 
-    if !showing_scratches.is_empty() {
-        let mut focused_workspace_opt: Option<&Node> = None;
-        for output in tree.nodes.iter() {
-            for workspace in output.nodes.iter() {
-                if workspace.focused
-                    || workspace.nodes.iter().any(|node| node.focused)
-                    || workspace.floating_nodes.iter().any(|node| node.focused)
-                {
-                    focused_workspace_opt = Some(workspace);
-                }
-            }
-        }
+    // if any showing, we need to check which output they are on
+    if !showing_scratch_ids.is_empty() {
+        let focused_workspace = tree
+            .nodes
+            .iter()
+            .find_map(|output| {
+                output.nodes.iter().find(|workspace| {
+                    workspace.focused
+                        || workspace.nodes.iter().any(|node| node.focused)
+                        || workspace.floating_nodes.iter().any(|node| node.focused)
+                })
+            })
+            .expect("focused workspace not found");
 
-        let focused_workspace = focused_workspace_opt.expect("focused workspace not found");
-
-        let showing_scratch_nodes: Vec<&Node> = focused_workspace
+        let nontarget_showing_scratch_ids: Vec<i64> = focused_workspace
             .floating_nodes
             .iter()
             .filter(|node| {
-                let is_scratch = showing_scratches.contains(&&node.id);
-                let is_target = match criteria_field {
+                let is_scratch = showing_scratch_ids.contains(&&node.id);
+                let is_target = match target_criteria_field {
                     CriteriaField::AppId => node
                         .app_id
                         .as_ref()
-                        .is_some_and(|app_id| *app_id == *criteria_value),
+                        .is_some_and(|app_id| *app_id == *target_criteria_value),
                     CriteriaField::Class => {
                         node.window_properties.as_ref().is_some_and(|window_props| {
                             window_props
                                 .class
                                 .as_ref()
-                                .is_some_and(|class| *class == *criteria_value)
+                                .is_some_and(|class| *class == *target_criteria_value)
                         })
                     }
                 };
                 is_target_showing_on_focused |= is_scratch && is_target;
                 is_scratch && !is_target
             })
+            .map(|node| node.id)
             .collect();
 
-        for showing_scratch_node in showing_scratch_nodes {
-            let showing_id = showing_scratch_node.id;
-            connection
-                .run_command(format!("[con_id={showing_id}] scratchpad show"))
-                .await?;
-        }
+        commands_to_run.extend(nontarget_showing_scratch_ids.iter().map(|id| {
+            let mut nontarget_hide_cmd: Vec<String> = Vec::new();
+            nontarget_hide_cmd.push(format!("[con_id={id}] scratchpad show"));
+            nontarget_hide_cmd
+        }));
     }
 
     // second, try to toggle our named scratch
-    let show_res = connection
-        .run_command(format!("[{criteria}] scratchpad show"))
-        .await?;
 
-    // if failed to show, we need to create a new scratch
-    if !show_res
-        .first()
-        .is_some_and(|show_res_inner| show_res_inner.is_ok())
-    {
-        let create_res = Command::new("sh").arg("-c").arg(exec).arg("&").status();
-        match create_res {
-            Err(err) => return Err(Box::new(err)),
-            _ => {}
-        };
-    }
+    let mut target_cmd: Vec<String> = Vec::new();
+    target_cmd.push(format!("[{target_criteria}]"));
+    target_cmd.push(format!("scratchpad show"));
 
-    // lastly, resize if needed
-
+    // third, include resize/move if needed
+    // if showing on focused, it will be hidden and the resize/move will fail
     if !is_target_showing_on_focused {
         match resize {
             Some(resize_arg) => {
-                let move_res = connection
-                    .run_command(format!("[{criteria}] move position center"))
-                    .await?
-                    .into_iter()
-                    .next()
-                    .unwrap();
-
-                let resize_res = connection
-                    .run_command(format!("[{criteria}] resize {resize_arg}"))
-                    .await?
-                    .into_iter()
-                    .next()
-                    .unwrap();
-
-                let mut res = Ok(());
-
-                if move_res.is_err() {
-                    res = move_res;
-                } else if resize_res.is_err() {
-                    res = resize_res;
-                }
-                match res {
-                    Err(err) => Err(Box::from(err)),
-                    _ => Ok(()),
-                }
+                target_cmd.push(format!("resize {resize_arg}"));
+                target_cmd.push(format!("move position center"));
             }
+            _ => (),
+        }
+    }
+
+    commands_to_run.push(target_cmd);
+
+    let swaymsg = commands_to_run
+        .iter()
+        .map(|inner| inner.join(","))
+        .collect::<Vec<String>>()
+        .join(";");
+
+    let res = connection.run_command(swaymsg).await?;
+
+    // need to create new scratch if `show` command failed
+    if res.last().unwrap().is_err() {
+        match connection
+            .run_command(format!("exec {exec}"))
+            .await?
+            .into_iter()
+            .next()
+            .unwrap()
+        {
+            Err(err) => Err(Box::new(err)),
             _ => Ok(()),
         }
     } else {
