@@ -5,14 +5,15 @@ Automatically starting named scratchpads for [sway](https://github.com/swaywm/sw
 ## Usage
 
 ```
-sway-scratch show --exec <EXEC> <--app-id <APP_ID>|--class <CLASS>>
+sway-scratch show [OPTIONS] --exec <EXEC> <--app-id <APP_ID>|--class <CLASS>>
 ```
 
-where:
-
-- `<EXEC>` is the command to open the scratch initially
-- `<APP_ID>` is the Wayland `app_id` of the application
-- `<CLASS>` is the `window_properties.class` of the application (Xwayland)
+Options:
+- `--app-id <APP_ID>`  the Wayland app_id of the application
+- `--class <CLASS>`    the window_properties.class of the application (Xwayland)
+- `--exec <EXEC>`      the command to open the scratch initially
+- `--resize <RESIZE>`  resize command to run when the scratch is shown (e.g. `set 90 ppt 90 ppt`)
+- `-h`, `--help`
 
 ### Examples
 

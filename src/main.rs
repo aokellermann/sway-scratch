@@ -11,17 +11,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// show named scratchpad
+    /// toggle named scratchpad
     Show {
         /// criteria
         #[command(flatten)]
         criteria: Criteria,
 
-        /// command to create a new scratchpad
+        /// the command to open the scratch initially
         #[arg(long)]
         exec: String,
 
-        /// resize arguments
+        /// resize command to run when the scratch is shown (e.g. "set 90 ppt 90 ppt")
         #[arg(long)]
         resize: Option<String>,
     },
@@ -30,11 +30,11 @@ enum Commands {
 #[derive(Args)]
 #[group(required = true, multiple = false)]
 struct Criteria {
-    /// scratchpad app_id
+    /// the Wayland app_id of the application
     #[arg(long)]
     app_id: Option<String>,
 
-    /// scratchpad class
+    /// the window_properties.class of the application (Xwayland)
     #[arg(long)]
     class: Option<String>,
 }
