@@ -21,6 +21,10 @@ enum Commands {
         /// command to create a new scratchpad
         #[arg(long)]
         exec: String,
+
+        /// resize arguments
+        #[arg(long)]
+        resize: Option<String>,
     },
 }
 
@@ -41,7 +45,11 @@ enum CriteriaField {
     Class,
 }
 
-async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> {
+async fn show(
+    criteria: &Criteria,
+    exec: &String,
+    resize: &Option<String>,
+) -> Result<(), Box<dyn Error>> {
     let criteria_field: CriteriaField;
     let criteria_value: &String;
 
@@ -99,6 +107,7 @@ async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> 
                 .any(|floating| floating.id == **focus)
         })
         .collect();
+    let mut is_target_showing_on_focused = false;
 
     if !showing_scratches.is_empty() {
         let mut focused_workspace_opt: Option<&Node> = None;
@@ -119,21 +128,23 @@ async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> 
             .floating_nodes
             .iter()
             .filter(|node| {
-                showing_scratches.contains(&&node.id)
-                    && !match criteria_field {
-                        CriteriaField::AppId => node
-                            .app_id
-                            .as_ref()
-                            .is_some_and(|app_id| *app_id == *criteria_value),
-                        CriteriaField::Class => {
-                            node.window_properties.as_ref().is_some_and(|window_props| {
-                                window_props
-                                    .class
-                                    .as_ref()
-                                    .is_some_and(|class| *class == *criteria_value)
-                            })
-                        }
+                let is_scratch = showing_scratches.contains(&&node.id);
+                let is_target = match criteria_field {
+                    CriteriaField::AppId => node
+                        .app_id
+                        .as_ref()
+                        .is_some_and(|app_id| *app_id == *criteria_value),
+                    CriteriaField::Class => {
+                        node.window_properties.as_ref().is_some_and(|window_props| {
+                            window_props
+                                .class
+                                .as_ref()
+                                .is_some_and(|class| *class == *criteria_value)
+                        })
                     }
+                };
+                is_target_showing_on_focused |= is_scratch && is_target;
+                is_scratch && !is_target
             })
             .collect();
 
@@ -145,25 +156,58 @@ async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> 
         }
     }
 
+    // second, try to toggle our named scratch
     let show_res = connection
         .run_command(format!("[{criteria}] scratchpad show"))
         .await?;
 
-    // second, try to toggle our named scratch
-    let show_success = match show_res.first().unwrap() {
-        Ok(_) => true,
-        _ => false,
-    };
-
-    // if success, nothing else to do
-    if show_success {
-        return Ok(());
+    // if failed to show, we need to create a new scratch
+    if !show_res
+        .first()
+        .is_some_and(|show_res_inner| show_res_inner.is_ok())
+    {
+        let create_res = Command::new("sh").arg("-c").arg(exec).arg("&").status();
+        match create_res {
+            Err(err) => return Err(Box::new(err)),
+            _ => {}
+        };
     }
 
-    // otherwise we need to create a new scratch
-    match Command::new("sh").arg("-c").arg(exec).arg("&").status() {
-        Ok(_) => Ok(()),
-        Err(err) => Err(Box::new(err)),
+    // lastly, resize if needed
+
+    if !is_target_showing_on_focused {
+        match resize {
+            Some(resize_arg) => {
+                let move_res = connection
+                    .run_command(format!("[{criteria}] move position center"))
+                    .await?
+                    .into_iter()
+                    .next()
+                    .unwrap();
+
+                let resize_res = connection
+                    .run_command(format!("[{criteria}] resize {resize_arg}"))
+                    .await?
+                    .into_iter()
+                    .next()
+                    .unwrap();
+
+                let mut res = Ok(());
+
+                if move_res.is_err() {
+                    res = move_res;
+                } else if resize_res.is_err() {
+                    res = resize_res;
+                }
+                match res {
+                    Err(err) => Err(Box::from(err)),
+                    _ => Ok(()),
+                }
+            }
+            _ => Ok(()),
+        }
+    } else {
+        Ok(())
     }
 }
 
@@ -171,8 +215,12 @@ async fn show(criteria: &Criteria, exec: &String) -> Result<(), Box<dyn Error>> 
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    let res: Result<(), Box<dyn Error>> = match &cli.command {
-        Commands::Show { criteria, exec } => show(criteria, exec).await,
+    let res = match &cli.command {
+        Commands::Show {
+            criteria,
+            exec,
+            resize,
+        } => show(criteria, exec, resize).await,
     };
 
     res
