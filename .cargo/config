@@ -1,0 +1,2 @@
+[alias]
+docs = "run -q --manifest-path ./crates/docs/Cargo.toml --"

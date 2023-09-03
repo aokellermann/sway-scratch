@@ -1,0 +1,15 @@
+[package]
+name = "sway-scratch"
+version = "0.2.1"
+authors = ["Antony Kellermann <antony@aokellermann.dev>"]
+edition = '2021'
+description = "Automatically starting named scratchpads for sway"
+readme = "README.md"
+homepage = "https://github.com/aokellermann/sway-scratch"
+repository = "https://github.com/aokellermann/sway-scratch"
+license = "MIT"
+
+[dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
+clap = { version = "4.4.1", features = ["derive", "string"] }
+swayipc-async = "2.0.1"
