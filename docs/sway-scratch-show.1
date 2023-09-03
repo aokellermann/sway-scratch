@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH sway-scratch-show 1  "sway-scratch-show " 
+.SH NAME
+sway\-scratch\-show \- toggle named scratchpad
+.SH SYNOPSIS
+\fBsway\-scratch\-show\fR [\fB\-\-app\-id\fR] [\fB\-\-class\fR] <\fB\-\-exec\fR> [\fB\-\-resize\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+toggle named scratchpad
+.SH OPTIONS
+.TP
+\fB\-\-app\-id\fR=\fIAPP_ID\fR
+the Wayland app_id of the application
+.TP
+\fB\-\-class\fR=\fICLASS\fR
+the window_properties.class of the application (Xwayland)
+.TP
+\fB\-\-exec\fR=\fIEXEC\fR
+the command to open the scratch initially
+.TP
+\fB\-\-resize\fR=\fIRESIZE\fR
+resize command to run when the scratch is shown (e.g. "set 90 ppt 90 ppt")
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
