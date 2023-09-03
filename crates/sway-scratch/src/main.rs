@@ -150,22 +150,33 @@ async fn show(
         .collect::<Vec<String>>()
         .join(";");
 
-    let res = connection.run_command(swaymsg).await?;
+    let show_res = connection.run_command(swaymsg).await?;
 
-    // need to create new scratch if `show` command failed
-    if res.last().unwrap().is_err() {
-        match connection
-            .run_command(format!("exec {exec}"))
-            .await?
-            .into_iter()
-            .next()
-            .unwrap()
-        {
-            Err(err) => Err(Box::new(err)),
-            _ => Ok(()),
-        }
-    } else {
-        Ok(())
+    // if success, nothing else to do
+    if show_res.last().unwrap().is_ok() {
+        return Ok(());
+    }
+
+    // scratch might not be floating anymore
+    // if so, move it back to scratch workspace
+    let move_scratchpad_res = connection
+        .run_command(format!("[{target_criteria}] move scratchpad"))
+        .await?;
+
+    if move_scratchpad_res.first().unwrap().is_ok() {
+        return Ok(());
+    }
+
+    // otherwise we need to exec
+    match connection
+        .run_command(format!("exec {exec}"))
+        .await?
+        .into_iter()
+        .next()
+        .unwrap()
+    {
+        Err(err) => Err(Box::new(err)),
+        _ => Ok(()),
     }
 }
 
