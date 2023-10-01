@@ -64,5 +64,5 @@ cargo build --release
 and install it:
 
 ```console
-cargo install --path .
+cargo install --path crates/sway-scratch
 ```
