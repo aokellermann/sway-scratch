@@ -12,4 +12,4 @@ license = "MIT"
 [dependencies]
 sway-scratch = { path = "../sway-scratch" }
 clap_mangen = "0.2.16"
-clap = { version = "4.4.12" }
+clap = { version = "4.4.13" }
